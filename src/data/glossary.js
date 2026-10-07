@@ -22,7 +22,7 @@ export const GLOSSARY = [
   { term:"Ladder (LAD)", def:"Linguaggio di programmazione PLC che rappresenta la logica con simboli di contatti e bobine, simile agli schemi a relè." },
   { term:"M (Merker)", def:"Bit di memoria interna del PLC. Non corrisponde a nessun ingresso/uscita fisico — usato per variabili di supporto e logica interna." },
   { term:"NA (Normalmente Aperto)", def:"Contatto che si chiude (lascia passare corrente) quando il bit associato è 1 (TRUE)." },
-  { term:"NC (Normalmente Chiuso)", def:"Contatto che si apre (blocca la corrente) quando il bit associato è 1 (TRUE). Usato per STOP e sicurezze." },
+  { term:"NC (Normalmente Chiuso)", def:"Contatto che si apre (blocca la corrente) quando il bit associato è 1 (TRUE). Verifica che il bit sia 0; non indica da solo il cablaggio fisico né realizza una funzione di sicurezza." },
   { term:"NORM_X", def:"Istruzione TIA Portal che normalizza un valore raw (es. 0-27648) in un Real 0.0-1.0. Primo step della scalatura analogica." },
   { term:"OB (Organization Block)", def:"Blocco organizzativo chiamato dal SO del PLC. OB1 = ciclo principale (obbligatorio). OB100 = startup. OB30-38 = interrupt ciclici." },
   { term:"PLC", def:"Programmable Logic Controller — computer industriale robusto per il controllo automatico di macchine e processi." },
@@ -33,11 +33,12 @@ export const GLOSSARY = [
   { term:"Rung", def:"Singola riga orizzontale del programma Ladder. Ogni rung è una equazione logica: corrente scorre da sinistra a destra se la condizione è vera." },
   { term:"SCALE_X", def:"Istruzione TIA Portal che scala un valore normalizzato (0.0-1.0) al range fisico engineering (es. 0.0-10.0 bar). Secondo step della scalatura analogica." },
   { term:"Scalatura analogica", def:"Conversione del valore grezzo AI (0-27648) nel valore fisico reale (bar, °C, l/min). Formula: Fisico = (Raw/27648) × (Max-Min) + Min." },
-  { term:"SET/RESET", def:"Bobine bistabili: SET porta il bit a 1 e lo mantiene; RESET lo porta a 0. Il RESET ha priorità se entrambi attivi nello stesso ciclo." },
+  { term:"SET/RESET", def:"Bobine bistabili: SET porta il bit a 1 e lo mantiene; RESET lo porta a 0. Con bobine separate prevale l’ultima scrittura eseguita. I blocchi SR/RS hanno priorità definite dall’istruzione." },
   { term:"TIA Portal", def:"Totally Integrated Automation Portal — ambiente di sviluppo integrato Siemens per PLC, HMI e azionamenti." },
   { term:"TOF", def:"Timer Off Delay — mantiene Q=1 per il tempo PT dopo che IN torna a 0. Uso tipico: ventilatore che continua dopo lo spegnimento." },
   { term:"TON", def:"Timer On Delay — attiva Q dopo che IN è attivo da un tempo pari a PT. Il più usato in automazione." },
   { term:"TP", def:"Timer Pulse — genera un impulso di durata fissa PT all'attivazione di IN. Q rimane alto esattamente PT, poi scende indipendentemente da IN." },
   { term:"Watch Table", def:"Tabella TIA Portal per monitorare variabili in tempo reale mentre il PLC è in RUN. Permette di visualizzare e modificare valori durante l'esecuzione." },
-  { term:"27648", def:"Valore massimo standard Siemens per moduli AI/AQ. Corrisponde al fondo scala (20 mA o 10 V). I valori > 27648 indicano overrange o guasto sensore." },
+  { term:"27648", def:"Fondo scala nominale comune di diversi range analogici Siemens; verificare il modulo e la configurazione. Corrisponde al fondo scala (20 mA o 10 V). I valori > 27648 indicano overrange o guasto sensore." },
 ];
+
