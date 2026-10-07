@@ -1,4 +1,11 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useReducer } from "react";
+import { MODULES } from "./data/modules";
+import { QUIZ } from "./data/quiz";
+import { GLOSSARY } from "./data/glossary";
+import { EXAMPLES } from "./data/examples";
+import { createSimulation, simulationReducer } from "./simulation";
+import { loadCompleted, saveCompleted } from "./progress";
+import "./styles.css";
 
 // ─────────────────────────────────────────────
 // PALETTE
@@ -10,474 +17,10 @@ const BG_ELEM = "#0F172A";
 const RAIL = "#334155";
 
 // ─────────────────────────────────────────────
-// MODULES DATA
-// ─────────────────────────────────────────────
-const MODULES = [
-  {
-    id: 1, emoji: "🏭", title: "Introduzione ai PLC",
-    desc: "Cos'è un PLC, architettura e ciclo di scansione",
-    lessons: [
-      { id:"1.1", title:"Cos'è un PLC", dur:"10 min", content:[
-        {t:"h2",v:"Cos'è un PLC?"},
-        {t:"p",v:"Un **PLC** (Programmable Logic Controller) è un computer industriale progettato per controllare processi e macchinari in ambienti difficili (polvere, vibrazioni, temperature estreme)."},
-        {t:"h3",v:"Caratteristiche principali"},
-        {t:"list",v:["**Robustezza**: resiste a vibrazioni, umidità, temperature estreme","**Affidabilità**: progettato per funzionare 24/7 senza interruzioni","**Tempo reale**: risponde agli eventi in millisecondi","**Programmabilità**: la logica di controllo è software modificabile"]},
-        {t:"h3",v:"Dove si usa"},
-        {t:"list",v:["Linee di produzione automotive","Macchine per la plastica (presse, soffiaggio, stampaggio)","Impianti di imbottigliamento e confezionamento","Nastri trasportatori","Trattamento acque e ascensori"]},
-        {t:"info",v:"I PLC nacquero negli anni '60 per sostituire i sistemi a relè nelle fabbriche. Il primo PLC commerciale fu il Modicon 084 (1968). Siemens introdusse i suoi SIMATIC negli anni '70 e oggi domina il mercato mondiale con la serie S7."},
-      ]},
-      { id:"1.2", title:"Architettura del PLC", dur:"15 min", content:[
-        {t:"h2",v:"Architettura PLC Siemens S7-1200/1500"},
-        {t:"h3",v:"1. CPU — Unità Centrale di Elaborazione"},
-        {t:"p",v:"Il cervello del PLC. Contiene processore, memoria programma, memoria dati e porta di comunicazione (PROFINET/Ethernet)."},
-        {t:"h3",v:"2. Moduli di Ingresso (Input)"},
-        {t:"list",v:["**DI** (Digital Input): pulsanti, finecorsa, sensori ON/OFF","**AI** (Analog Input): sensori di temperatura/pressione/portata — segnali 4-20 mA o 0-10 V"]},
-        {t:"h3",v:"3. Moduli di Uscita (Output)"},
-        {t:"list",v:["**DQ** (Digital Output): contattori, valvole, spie luminose","**AQ** (Analog Output): controllo velocità inverter, valvole proporzionali"]},
-        {t:"h3",v:"Indirizzamento Siemens"},
-        {t:"table",cols:["Tipo","Prefisso","Esempio","Significato"],rows:[
-          ["Ingresso digitale","I","I0.0","Byte 0, Bit 0"],
-          ["Uscita digitale","Q","Q0.0","Byte 0, Bit 0"],
-          ["Merker (memoria)","M","M0.0","Bit di memoria interna"],
-          ["Data Block","DB","DB1.DBX0.0","Dato in Data Block 1"],
-        ]},
-        {t:"info",v:"Un modulo da 16 DI occupa I0.0 → I1.7 (16 bit = 2 byte). Questo vale anche per le uscite."},
-      ]},
-      { id:"1.3", title:"Il Ciclo di Scansione", dur:"12 min", content:[
-        {t:"h2",v:"Il Ciclo di Scansione (Scan Cycle)"},
-        {t:"p",v:"Il PLC esegue continuamente un ciclo di 3 fasi — ogni pochi millisecondi:"},
-        {t:"h3",v:"Fase 1 — Lettura Ingressi"},
-        {t:"p",v:"Il PLC legge tutti gli ingressi fisici e li copia nell'**Immagine di Processo degli Ingressi (IPI)** in memoria."},
-        {t:"code",v:"Sensore fisico → [LETTURA] → I0.0 in memoria RAM"},
-        {t:"h3",v:"Fase 2 — Esecuzione Programma"},
-        {t:"p",v:"Il PLC esegue tutto il codice dall'inizio alla fine, usando i valori letti nella fase 1."},
-        {t:"code",v:"Legge I0.0 → Esegue logica Ladder → Calcola Q0.0"},
-        {t:"h3",v:"Fase 3 — Scrittura Uscite"},
-        {t:"p",v:"Il PLC copia i valori calcolati nell'**Immagine di Processo delle Uscite (IPO)** sulle uscite fisiche."},
-        {t:"code",v:"Q0.0 in memoria → [SCRITTURA] → Contattore fisico"},
-        {t:"h3",v:"Tempi di ciclo tipici"},
-        {t:"table",cols:["PLC","Tempo tipico"],rows:[["S7-1200","1 – 10 ms"],["S7-1500","0.1 – 1 ms"]]},
-        {t:"info",v:"Il PLC è deterministico — ogni ciclo esegue esattamente le stesse operazioni nello stesso ordine. Questo lo rende prevedibile e sicuro per applicazioni critiche."},
-      ]},
-    ]
-  },
-  {
-    id: 2, emoji: "💻", title: "TIA Portal",
-    desc: "Installazione, interfaccia e primo progetto",
-    lessons: [
-      { id:"2.1", title:"Cos'è TIA Portal", dur:"10 min", content:[
-        {t:"h2",v:"TIA Portal — Totally Integrated Automation Portal"},
-        {t:"p",v:"TIA Portal è l'ambiente di sviluppo integrato Siemens per programmare PLC, creare HMI/SCADA (WinCC), configurare inverter (Startdrive) e fare diagnostica."},
-        {t:"h3",v:"Versioni principali"},
-        {t:"table",cols:["Versione","Note"],rows:[
-          ["V16","Molto stabile, ancora molto diffusa"],
-          ["V17","Supporto avanzato S7-1500"],
-          ["V18","OPC UA integrato"],
-          ["V19","Ultima versione (2024)"],
-        ]},
-        {t:"h3",v:"Licenze"},
-        {t:"list",v:[
-          "**STEP 7 Basic**: solo S7-1200, funzionalità limitate",
-          "**STEP 7 Professional**: tutti i PLC, funzionalità complete",
-          "**Trial**: 21 giorni gratuiti su siemens.com",
-        ]},
-        {t:"h3",v:"Requisiti di sistema (V18)"},
-        {t:"list",v:["Windows 10/11 Pro 64-bit","RAM: 16 GB (consigliati 32 GB)","Spazio disco: 40 GB",".NET Framework 4.8"]},
-        {t:"info",v:"Per iniziare gratis: scarica TIA Portal V18 Trial + PLCSIM Advanced da siemens.com/tia-portal. Con PLCSIM puoi simulare senza hardware reale!"},
-      ]},
-      { id:"2.2", title:"Interfaccia TIA Portal", dur:"15 min", content:[
-        {t:"h2",v:"L'Interfaccia di TIA Portal"},
-        {t:"h3",v:"Project Tree — Pannello sinistro"},
-        {t:"p",v:"Struttura gerarchica del progetto: PLC, blocchi programma (OB, FC, FB), tag tables, HMI screens, configurazione hardware."},
-        {t:"code",v:"📁 Progetto_1\n  📁 PLC_1 [CPU 1214C]\n    📁 Program blocks\n      📄 Main [OB1]       ← ciclo principale\n      📄 FC_Motore [FC1]  ← funzione\n      📄 FB_Valvola [FB1] ← blocco funzione\n    📁 PLC tags\n      📄 Default tag table\n  📁 HMI_1 [TP700]\n    📁 Screens"},
-        {t:"h3",v:"Barra degli strumenti Ladder"},
-        {t:"table",cols:["Simbolo","Elemento","Descrizione"],rows:[
-          ["[ ]","Contatto NA","Si chiude quando il bit è 1"],
-          ["[/]","Contatto NC","Si chiude quando il bit è 0"],
-          ["( )","Bobina normale","Attiva l'uscita"],
-          ["(S)","Bobina SET","Attiva e mantiene"],
-          ["(R)","Bobina RESET","Spegne un SET"],
-          ["TON","Timer on delay","Ritardo all'eccitazione"],
-          ["TOF","Timer off delay","Ritardo alla diseccitazione"],
-          ["CTU","Contatore up","Conta fronti di salita"],
-        ]},
-        {t:"h3",v:"Inspector Window — Pannello inferiore"},
-        {t:"p",v:"Mostra proprietà dell'oggetto selezionato, info di diagnostica e cross-reference (dove è usata ogni variabile)."},
-      ]},
-      { id:"2.3", title:"Creare il primo progetto", dur:"20 min", content:[
-        {t:"h2",v:"Creare un Progetto in TIA Portal"},
-        {t:"h3",v:"Passo 1 — Nuovo progetto"},
-        {t:"list",v:["Avvia TIA Portal","Click **'Create new project'**","Inserisci nome, percorso, autore","Click **'Create'**"]},
-        {t:"h3",v:"Passo 2 — Aggiungi il PLC"},
-        {t:"list",v:["Nel Portal View: click **'Configure a device'**","Click **'Add new device'**","Seleziona: Controllers → SIMATIC S7-1200 → CPU 1214C DC/DC/DC","Click **OK**"]},
-        {t:"h3",v:"Passo 3 — Crea le variabili (Tag Table)"},
-        {t:"table",cols:["Name","Data Type","Address"],rows:[
-          ["Pulsante_Start","Bool","%I0.0"],
-          ["Pulsante_Stop","Bool","%I0.1"],
-          ["Motore_Marcia","Bool","%Q0.0"],
-          ["Spia_Guasto","Bool","%Q0.1"],
-        ]},
-        {t:"h3",v:"Passo 4 — Simulazione con PLCSIM"},
-        {t:"p",v:"Non serve hardware reale! Vai su **Online → Simulation → Start** per simulare il PLC sul PC. Puoi forzare ingressi e osservare le uscite in tempo reale."},
-        {t:"info",v:"Best practice: usa sempre nomi simbolici (es. 'Pulsante_Start') invece degli indirizzi assoluti (%I0.0). Il codice diventa molto più leggibile e manutenibile."},
-      ]},
-    ]
-  },
-  {
-    id: 3, emoji: "🪜", title: "Linguaggio Ladder",
-    desc: "Contatti, bobine, logica e auto-mantenimento",
-    lessons: [
-      { id:"3.1", title:"Contatti e Bobine", dur:"15 min", content:[
-        {t:"h2",v:"Contatti e Bobine — Gli elementi base"},
-        {t:"h3",v:"Il Rung (Gradino)"},
-        {t:"p",v:"Ogni riga orizzontale del Ladder si chiama **rung**. La 'corrente' scorre da sinistra a destra se la logica è soddisfatta."},
-        {t:"code",v:"|----[ I0.0 ]----[ /I0.1 ]----(Q0.0)----|"},
-        {t:"h3",v:"Contatto Normalmente Aperto (NA) — [ ]"},
-        {t:"list",v:["Si **chiude** (lascia passare) quando il bit è **1 (TRUE)**","Simbolo: `---[ ]---`","Esempio: `[ I0.0 ]` → passa corrente se il pulsante è premuto"]},
-        {t:"h3",v:"Contatto Normalmente Chiuso (NC) — [/]"},
-        {t:"list",v:["Si **apre** (blocca) quando il bit è **1 (TRUE)**","Si **chiude** quando il bit è **0 (FALSE)**","Simbolo: `---[/]---`","Uso tipico: pulsante di STOP, finecorsa di sicurezza"]},
-        {t:"h3",v:"Bobina — ( )"},
-        {t:"list",v:["Si **attiva** (diventa 1) quando riceve corrente da sinistra","Metti **sempre la bobina a destra** nel rung","Una bobina attiva può essere usata come contatto in altri rung"]},
-        {t:"h3",v:"Logica AND — Contatti in serie"},
-        {t:"code",v:"|----[ I0.0 ]----[ I0.1 ]----(Q0.0)----|\nQ0.0 = 1  solo se  I0.0 = 1  E  I0.1 = 1"},
-        {t:"h3",v:"Logica OR — Rami paralleli"},
-        {t:"code",v:"|----[ I0.0 ]----+----(Q0.0)----|\n                 |                  |\n|----[ I0.1 ]----+                  |\nQ0.0 = 1  se  I0.0 = 1  O  I0.1 = 1"},
-      ]},
-      { id:"3.2", title:"Circuito Start/Stop", dur:"20 min", content:[
-        {t:"h2",v:"Il Circuito Start/Stop con Auto-mantenimento"},
-        {t:"p",v:"È il circuito più importante nel Ladder! Permette di avviare e arrestare un motore con due pulsanti mantenendo lo stato."},
-        {t:"h3",v:"Il Problema"},
-        {t:"p",v:"Un pulsante NA rilasciato torna a 0. Come manteniamo il motore in marcia senza tenere premuto START?"},
-        {t:"h3",v:"La Soluzione — Auto-mantenimento (Self-Holding)"},
-        {t:"code",v:"Rung 1 — Controllo Marcia:\n|----[ I0.0 ]----+----[/I0.1]----(M0.0)----|\n   (START NA)    |   (STOP NC)  (Marcia)    |\n                 |                           |\n             [ M0.0 ]                        |\n            (Auto-man.)                     |\n\nRung 2 — Uscita Motore:\n|----[ M0.0 ]----(Q0.0)----|\n   (Marcia)    (Motore)"},
-        {t:"h3",v:"Spiegazione passo-passo"},
-        {t:"list",v:[
-          "**Avvio**: premi START (I0.0=1) → corrente arriva a M0.0 → Marcia=1",
-          "**Mantenimento**: rilasci START → M0.0 chiude il ramo parallelo → motore continua",
-          "**Arresto**: premi STOP (I0.1=1) → [/I0.1] si apre → M0.0=0 → motore fermo",
-        ]},
-        {t:"h3",v:"Best Practice"},
-        {t:"list",v:[
-          "STOP sempre su contatto **NC** — sicurezza: se il cavo si rompe, il motore si ferma",
-          "Aggiungi protezioni termiche in serie al STOP",
-          "Usa **M (merker)** per la logica interna, **Q** solo per le uscite fisiche",
-        ]},
-        {t:"info",v:"💡 Prova il circuito Start/Stop nel Simulatore! Vedrai il flusso di corrente in tempo reale."},
-      ]},
-      { id:"3.3", title:"Bobine SET e RESET", dur:"12 min", content:[
-        {t:"h2",v:"Bobine SET (S) e RESET (R)"},
-        {t:"p",v:"Le bobine SET e RESET mantengono il loro stato anche quando la condizione che le ha attivate scompare — sono **bistabili**."},
-        {t:"h3",v:"Bobina SET — (S)"},
-        {t:"p",v:"Porta il bit a **1** quando riceve corrente. Mantiene il bit a 1 anche quando la corrente scompare. Si resetta solo con una bobina RESET."},
-        {t:"h3",v:"Bobina RESET — (R)"},
-        {t:"p",v:"Porta il bit a **0** quando riceve corrente."},
-        {t:"code",v:"Rung 1 — SET lampada:\n|----[ I0.0 ]----(S M0.0)----|\n   (Pulsante ON)  (SET)\n\nRung 2 — RESET lampada:\n|----[ I0.1 ]----(R M0.0)----|\n   (Pulsante OFF) (RESET)\n\nRung 3 — Uscita:\n|----[ M0.0 ]----(Q0.0)----|\n              (Lampada)"},
-        {t:"h3",v:"Priorità in caso di conflitto"},
-        {t:"p",v:"Se SET e RESET si attivano contemporaneamente, **il RESET ha priorità** (viene eseguito dopo nel ciclo di scansione). Metti sempre il RESET dopo il SET nei rung."},
-        {t:"table",cols:["Situazione","Preferisci"],rows:[
-          ["Logica semplice","Auto-mantenimento"],
-          ["Più punti di attivazione/disattivazione","SET/RESET"],
-          ["Sequenze complesse","SET/RESET"],
-          ["Massima leggibilità","SET/RESET"],
-        ]},
-      ]},
-    ]
-  },
-  {
-    id: 4, emoji: "⏱️", title: "Timer e Contatori",
-    desc: "TON, TOF, TP, CTU, CTD",
-    lessons: [
-      { id:"4.1", title:"Timer TON", dur:"15 min", content:[
-        {t:"h2",v:"Timer TON — On Delay"},
-        {t:"p",v:"Il TON è il timer più usato. Attiva l'uscita **Q** dopo che l'ingresso **IN** è attivo da un tempo pari a **PT** (Preset Time)."},
-        {t:"code",v:"IN  ___|‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾|___\n       |← PT = 5s →|\nQ   ___|________________|‾‾‾‾‾‾‾‾‾|___"},
-        {t:"h3",v:"Parametri"},
-        {t:"table",cols:["Pin","Tipo","Descrizione"],rows:[
-          ["IN","Bool","Ingresso abilitazione"],
-          ["PT","Time","Tempo preimpostato (es. T#5s)"],
-          ["Q","Bool","Uscita — 1 quando ET ≥ PT"],
-          ["ET","Time","Elapsed Time — tempo trascorso"],
-        ]},
-        {t:"h3",v:"Formati del tempo"},
-        {t:"code",v:"T#500ms  → 500 millisecondi\nT#5s     → 5 secondi\nT#2m30s  → 2 minuti e 30 secondi\nT#1h     → 1 ora"},
-        {t:"h3",v:"Esempio — Ritardo avvio motore"},
-        {t:"code",v:"Rung 1 — Timer:\n|----[ I0.0 ]----[TON PT:=T#5s]----(Q)----(M0.1)----|\n\nRung 2 — Uscita dopo 5 secondi:\n|----[ M0.1 ]----(Q0.0)----|\n            (Motore)"},
-        {t:"info",v:"⚠️ Il TON resetta ET → 0 appena IN torna a 0! Se vuole un timer che mantiene il risultato, usa SET/RESET con il timer."},
-      ]},
-      { id:"4.2", title:"Timer TOF e TP", dur:"12 min", content:[
-        {t:"h2",v:"Timer TOF e TP"},
-        {t:"h3",v:"TOF — Off Delay"},
-        {t:"p",v:"Mantiene l'uscita attiva per un tempo dopo che l'ingresso si è disattivato."},
-        {t:"code",v:"IN  ‾‾‾‾‾‾‾‾‾‾‾‾‾‾|__________________________\n               |← PT →|\nQ   ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾|____________________"},
-        {t:"p",v:"**Uso tipico**: ventilatore che continua 30s dopo lo spegnimento del riscaldamento."},
-        {t:"h3",v:"TP — Pulse"},
-        {t:"p",v:"Genera un impulso di durata fissa all'attivazione dell'ingresso."},
-        {t:"code",v:"IN  __|‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾|_________________________\n    |← PT (impulso) →|\nQ   __|‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾|___________________________"},
-        {t:"p",v:"**Uso tipico**: valvola che si apre esattamente 2 secondi ad ogni comando."},
-        {t:"h3",v:"Confronto"},
-        {t:"table",cols:["Timer","Q si attiva","Q si disattiva"],rows:[
-          ["TON","Dopo PT da IN=1","Subito quando IN=0"],
-          ["TOF","Subito quando IN=1","Dopo PT da IN=0"],
-          ["TP","Subito quando IN=1","Dopo PT (anche se IN=0)"],
-        ]},
-      ]},
-      { id:"4.3", title:"Contatori CTU e CTD", dur:"15 min", content:[
-        {t:"h2",v:"Contatori CTU, CTD, CTUD"},
-        {t:"h3",v:"CTU — Counter Up"},
-        {t:"p",v:"Conta i **fronti di salita** (0→1) dell'ingresso CU. Quando il valore attuale **CV** raggiunge il valore preimpostato **PV**, l'uscita Q diventa 1."},
-        {t:"code",v:"CU  _|‾|_|‾|_|‾|_|‾|_|‾|_\n     1   2   3   4   5\n                       ↑ CV = PV → Q = 1"},
-        {t:"h3",v:"Parametri CTU"},
-        {t:"table",cols:["Pin","Tipo","Descrizione"],rows:[
-          ["CU","Bool","Count Up — fronte di salita"],
-          ["R","Bool","Reset — azzera il contatore"],
-          ["PV","Int","Preset Value — valore target"],
-          ["Q","Bool","1 quando CV ≥ PV"],
-          ["CV","Int","Current Value — valore attuale"],
-        ]},
-        {t:"h3",v:"Esempio — Conta pezzi su nastro"},
-        {t:"code",v:"Rung 1 — Conta fronti sensore:\n|----[P I0.0]----[CTU PV:=10]----(Q)----(M0.0)----|\n   (Sensore)                   (10 pezzi?)"},
-        {t:"h3",v:"Perché usare [P] — rilevazione fronte"},
-        {t:"p",v:"Senza **[P]**, il CTU incrementerebbe ogni scan cycle (migliaia di volte al secondo!). Con **[P]** si conta solo il fronte 0→1: un solo incremento per ogni attivazione reale."},
-        {t:"h3",v:"CTD — Counter Down"},
-        {t:"p",v:"Parte da PV e conta verso il basso. Q = 1 quando CV ≤ 0. **Uso tipico**: distributore che parte con 100 pezzi e si svuota."},
-        {t:"info",v:"CTUD combina entrambi: ha sia CU (conta su) che CD (conta giù) — utile per sistemi che caricano e scaricano pezzi contemporaneamente."},
-      ]},
-    ]
-  },
-  {
-    id: 5, emoji: "🏗️", title: "Struttura del Programma",
-    desc: "OB, FC, FB e Data Block",
-    lessons: [
-      { id:"5.1", title:"Organization Block (OB)", dur:"12 min", content:[
-        {t:"h2",v:"Organization Block — Il punto di partenza"},
-        {t:"p",v:"Gli OB sono i blocchi di livello più alto. Il sistema operativo del PLC li chiama automaticamente in base a eventi o al ciclo."},
-        {t:"table",cols:["OB","Nome","Quando viene chiamato"],rows:[
-          ["OB1","Program Cycle","Ad ogni ciclo di scansione — logica principale"],
-          ["OB100","Startup","Una sola volta all'avvio del PLC"],
-          ["OB30-38","Interrupt ciclici","A intervalli fissi (es. ogni 100ms) — PID"],
-          ["OB40-47","Interrupt hardware","Al cambio stato di un ingresso — risposta µs"],
-          ["OB80/82","Gestione errori","In caso di errori del sistema"],
-        ]},
-        {t:"h3",v:"Struttura tipica di un progetto"},
-        {t:"code",v:"OB100 (Startup)\n  └── Inizializza variabili\n  └── Imposta parametri default\n\nOB1 (Ciclo principale)\n  └── Chiama FC_GestioneIngressi()\n  └── Chiama FC_Sicurezza()\n  └── Chiama FB_Motore_1(DB1)\n  └── Chiama FB_Motore_2(DB2)\n  └── Chiama FB_Valvola_1(DB3)\n  └── Chiama FC_GestioneUscite()"},
-        {t:"info",v:"OB1 è obbligatorio — deve sempre esistere nel progetto. È il cuore del programma che viene eseguito continuamente."},
-      ]},
-      { id:"5.2", title:"FC e FB", dur:"18 min", content:[
-        {t:"h2",v:"FC e FB — Blocchi riutilizzabili"},
-        {t:"h3",v:"FC — Function"},
-        {t:"p",v:"Blocco **senza memoria propria**. I parametri vengono passati dall'esterno. Ideale per calcoli e logica stateless."},
-        {t:"code",v:"FC_ScalaAnalogico:\n  INPUT:  ValoreRaw : Int    (0 - 27648)\n  INPUT:  MinEng    : Real   (es. 0.0 bar)\n  INPUT:  MaxEng    : Real   (es. 10.0 bar)\n  OUTPUT: Valore    : Real\n\n  Formula: Valore := (ValoreRaw / 27648.0)\n                     * (MaxEng - MinEng) + MinEng"},
-        {t:"h3",v:"FB — Function Block"},
-        {t:"p",v:"Blocco **con memoria propria** (Instance Data Block). Mantiene il proprio stato tra le chiamate. Ideale per controllare dispositivi."},
-        {t:"code",v:"FB_Motore:\n  INPUT:  Start  : Bool\n  INPUT:  Stop   : Bool\n  INPUT:  Guasto : Bool\n  OUTPUT: Marcia : Bool\n  STATIC: Stato  : Int   ← memoria interna!"},
-        {t:"h3",v:"Instance Data Block (IDB)"},
-        {t:"p",v:"Ogni volta che usi un FB, TIA Portal crea un DB per ogni istanza — stessa logica, dati separati:"},
-        {t:"code",v:"FB_Motore → DB1 (Motore 1)\nFB_Motore → DB2 (Motore 2)\nFB_Motore → DB3 (Motore 3)\n// Stesso codice, tre set di variabili!"},
-        {t:"table",cols:["Usa FC quando…","Usa FB quando…"],rows:[
-          ["Non serve memoria","Hai stati da memorizzare"],
-          ["Calcoli puri","Controllo dispositivi fisici"],
-          ["Utility generiche","Hai timer/contatori interni"],
-          ["Non hai istanze multiple","Hai N dispositivi identici"],
-        ]},
-      ]},
-    ]
-  },
-];
-
-// ─────────────────────────────────────────────
-// QUIZ
-// ─────────────────────────────────────────────
-const QUIZ = [
-  { q:"Cosa significa l'acronimo PLC?", opts:["Programmable Logic Controller","Process Line Computer","Programmable Line Control","Process Logic Computer"], ans:0, exp:"PLC = Programmable Logic Controller — controllore logico programmabile." },
-  { q:"In quale ordine si svolge il ciclo di scansione del PLC?", opts:["Esecuzione → Lettura → Scrittura","Lettura ingressi → Esecuzione → Scrittura uscite","Scrittura → Lettura → Esecuzione","Lettura → Scrittura → Esecuzione"], ans:1, exp:"Il ciclo corretto: 1) Legge ingressi, 2) Esegue il programma, 3) Scrive le uscite." },
-  { q:"Quale prefisso identifica un'uscita digitale Siemens?", opts:["I","M","Q","D"], ans:2, exp:"Q identifica le uscite (Output). I = Ingressi, M = Merker (memoria)." },
-  { q:"Un contatto Normalmente Chiuso [/] lascia passare corrente quando...", opts:["Il bit è 1","Il bit è 0","Si preme un pulsante fisico","La bobina è attiva"], ans:1, exp:"Il contatto NC [/] è chiuso (lascia passare) quando il bit associato è 0 (FALSE)." },
-  { q:"Nell'auto-mantenimento, il contatto in parallelo al pulsante START serve per...", opts:["Invertire la logica","Mantenere il circuito chiuso quando il pulsante viene rilasciato","Proteggere il motore da sovraccarico","Aggiungere un ritardo di avvio"], ans:1, exp:"Il self-holding mantiene M0.0 attivo anche dopo aver rilasciato START — il motore continua a girare." },
-  { q:"Un timer TON con PT = T#5s: quando diventa 1 l'uscita Q?", opts:["Subito quando IN = 1","5 secondi dopo che IN torna a 0","5 secondi dopo che IN diventa 1","Dopo 5 cicli di scansione"], ans:2, exp:"TON = On Delay. Q si attiva dopo PT secondi dall'attivazione di IN." },
-  { q:"Perché si usa [P] (rilevazione fronte) in ingresso a un CTU?", opts:["Per velocizzare il conteggio","Per evitare che il contatore incrementi ad ogni scan cycle","Per resettare il contatore","Per abilitare il conteggio in discesa"], ans:1, exp:"Senza [P], il CTU incrementerebbe migliaia di volte al secondo. Con [P] conta solo il fronte 0→1 reale." },
-  { q:"Qual è la differenza principale tra FC e FB?", opts:["L'FC è più veloce","L'FB ha una memoria propria (Instance DB), l'FC no","L'FC può essere usato solo in OB1","L'FB non può avere parametri di ingresso"], ans:1, exp:"L'FB mantiene variabili statiche nel suo Instance DB tra una chiamata e l'altra. L'FC non ha memoria propria." },
-  { q:"In TIA Portal, quale OB viene eseguito una sola volta all'avvio del PLC?", opts:["OB1","OB30","OB100","OB40"], ans:2, exp:"OB100 (Startup) viene eseguito una sola volta all'avvio — ideale per inizializzare variabili e parametri default." },
-  { q:"Il timer TOF mantiene Q = 1...", opts:["Per il tempo PT dopo che IN diventa 1","Per il tempo PT dopo che IN torna a 0","Fino al reset manuale","Indefinitamente dopo l'attivazione"], ans:1, exp:"TOF = Off Delay. Q rimane attivo per PT secondi dopo che IN si è disattivato." },
-];
-
-// ─────────────────────────────────────────────
-// GLOSSARY
-// ─────────────────────────────────────────────
-const GLOSSARY = [
-  { term:"AI (Analog Input)", def:"Modulo di ingresso analogico. Legge segnali continui come 4-20mA o 0-10V da sensori di temperatura, pressione, portata." },
-  { term:"AQ (Analog Output)", def:"Modulo di uscita analogico. Genera segnali continui per controllare inverter, valvole proporzionali." },
-  { term:"CTD", def:"Counter Down — contatore in discesa. Parte da PV e conta verso il basso. Q=1 quando CV≤0." },
-  { term:"CTU", def:"Counter Up — contatore in salita. Conta fronti di salita dell'ingresso CU. Q=1 quando CV≥PV." },
-  { term:"Ciclo di scansione", def:"Il ciclo ripetuto del PLC: 1) Legge ingressi, 2) Esegue programma, 3) Scrive uscite. Dura tipicamente 1-10ms." },
-  { term:"CPU", def:"Unità centrale di elaborazione del PLC. Contiene processore, memoria programma, memoria dati e interfacce." },
-  { term:"DB (Data Block)", def:"Area di memoria strutturata per memorizzare dati del programma. Può essere Global DB (condiviso) o Instance DB (di un FB)." },
-  { term:"DI (Digital Input)", def:"Modulo di ingresso digitale. Legge segnali ON/OFF da pulsanti, sensori, finecorsa." },
-  { term:"DQ (Digital Output)", def:"Modulo di uscita digitale. Comanda contattori, valvole, luci, relè." },
-  { term:"FB (Function Block)", def:"Blocco funzione con memoria propria (Instance DB). Mantiene il proprio stato tra le chiamate. Usato per controllo dispositivi." },
-  { term:"FC (Function)", def:"Funzione senza memoria propria. Ogni chiamata è indipendente. Ideale per calcoli e utilità generiche." },
-  { term:"HMI", def:"Human Machine Interface — pannello operatore touch screen per visualizzare e controllare il processo." },
-  { term:"I (Ingresso)", def:"Prefisso Siemens per gli ingressi digitali. I0.0 = byte 0, bit 0." },
-  { term:"IDB (Instance Data Block)", def:"Data Block creato automaticamente per ogni istanza di un FB. Contiene le variabili statiche dell'FB." },
-  { term:"Ladder (LAD)", def:"Linguaggio di programmazione PLC che rappresenta la logica con simboli di contatti e bobine, simile agli schemi a relè." },
-  { term:"M (Merker)", def:"Bit di memoria interna del PLC. Non corrisponde a nessun ingresso/uscita fisico — usato per variabili di supporto." },
-  { term:"NA (Normalmente Aperto)", def:"Contatto che si chiude (lascia passare corrente) quando il bit associato è 1 (TRUE)." },
-  { term:"NC (Normalmente Chiuso)", def:"Contatto che si apre (blocca la corrente) quando il bit associato è 1 (TRUE). Usato per STOP e sicurezze." },
-  { term:"OB (Organization Block)", def:"Blocco organizzativo chiamato dal SO del PLC. OB1 = ciclo principale. OB100 = startup." },
-  { term:"PLC", def:"Programmable Logic Controller — computer industriale robusto per il controllo automatico di macchine e processi." },
-  { term:"PLCSIM", def:"Software Siemens per simulare un PLC sul PC senza hardware reale. Incluso in TIA Portal." },
-  { term:"PROFINET", def:"Protocollo Ethernet industriale Siemens per comunicazione PLC-HMI-periferiche-PLC." },
-  { term:"Q (Uscita)", def:"Prefisso Siemens per le uscite digitali. Q0.0 = byte 0, bit 0." },
-  { term:"Rung", def:"Singola riga orizzontale del programma Ladder. Ogni rung è una equazione logica." },
-  { term:"SET/RESET", def:"Bobine bistabili: SET porta il bit a 1 e lo mantiene; RESET lo porta a 0. Il RESET ha priorità." },
-  { term:"TIA Portal", def:"Totally Integrated Automation Portal — ambiente di sviluppo integrato Siemens per PLC, HMI e azionamenti." },
-  { term:"TOF", def:"Timer Off Delay — mantiene Q=1 per il tempo PT dopo che IN torna a 0." },
-  { term:"TON", def:"Timer On Delay — attiva Q dopo che IN è attivo da un tempo pari a PT." },
-  { term:"TP", def:"Timer Pulse — genera un impulso di durata fissa PT all'attivazione di IN." },
-];
-
-// ─────────────────────────────────────────────
-// SIMULATOR EXAMPLES
-// ─────────────────────────────────────────────
-const EXAMPLES = [
-  {
-    id:"start_stop", title:"Start / Stop Motore",
-    desc:"Circuito classico con auto-mantenimento. Premi START per avviare, STOP per fermare.",
-    initialBits:{"I0.0":false,"I0.1":false,"M0.0":false,"Q0.0":false},
-    inputs:[{bit:"I0.0",label:"START (NA)"},{bit:"I0.1",label:"STOP (NC)"}],
-    outputs:[{bit:"Q0.0",label:"MOTORE"}],
-    evaluate:(bits)=>{
-      const n={...bits};
-      n["M0.0"]=(bits["I0.0"]||bits["M0.0"])&&!bits["I0.1"];
-      n["Q0.0"]=n["M0.0"];
-      return n;
-    },
-    rungs:[
-      {label:"Rung 1 — Controllo marcia",type:"parallel",
-       top:[{type:"contact_no",bit:"I0.0",label:"START"}],
-       bottom:[{type:"contact_no",bit:"M0.0",label:"Auto-man."}],
-       series:[{type:"contact_nc",bit:"I0.1",label:"STOP"}],
-       coil:{type:"coil",bit:"M0.0",label:"Marcia"}},
-      {label:"Rung 2 — Uscita motore",type:"simple",
-       contacts:[{type:"contact_no",bit:"M0.0",label:"Marcia"}],
-       coil:{type:"coil",bit:"Q0.0",label:"MOTORE"}},
-    ]
-  },
-  {
-    id:"and_or", title:"Logica AND / OR",
-    desc:"Serie = AND, Parallelo = OR. Sperimenta le combinazioni di A, B, C.",
-    initialBits:{"I0.0":false,"I0.1":false,"I0.2":false,"Q0.0":false,"Q0.1":false},
-    inputs:[{bit:"I0.0",label:"A"},{bit:"I0.1",label:"B"},{bit:"I0.2",label:"C"}],
-    outputs:[{bit:"Q0.0",label:"AND (A·B)"},{bit:"Q0.1",label:"OR (A+C)"}],
-    evaluate:(bits)=>{
-      const n={...bits};
-      n["Q0.0"]=bits["I0.0"]&&bits["I0.1"];
-      n["Q0.1"]=bits["I0.0"]||bits["I0.2"];
-      return n;
-    },
-    rungs:[
-      {label:"Rung 1 — AND (contatti in serie)",type:"simple",
-       contacts:[{type:"contact_no",bit:"I0.0",label:"A"},{type:"contact_no",bit:"I0.1",label:"B"}],
-       coil:{type:"coil",bit:"Q0.0",label:"AND"}},
-      {label:"Rung 2 — OR (contatti in parallelo)",type:"parallel",
-       top:[{type:"contact_no",bit:"I0.0",label:"A"}],
-       bottom:[{type:"contact_no",bit:"I0.2",label:"C"}],
-       series:[],
-       coil:{type:"coil",bit:"Q0.1",label:"OR"}},
-    ]
-  },
-  {
-    id:"set_reset", title:"SET / RESET Lampada",
-    desc:"Bobine bistabili. ON accende la lampada, OFF la spegne — lo stato si mantiene.",
-    initialBits:{"I0.0":false,"I0.1":false,"M0.0":false,"Q0.0":false},
-    inputs:[{bit:"I0.0",label:"ON (SET)"},{bit:"I0.1",label:"OFF (RESET)"}],
-    outputs:[{bit:"Q0.0",label:"LAMPADA"}],
-    evaluate:(bits,prev)=>{
-      const n={...bits};
-      if(bits["I0.0"]) n["M0.0"]=true;
-      if(bits["I0.1"]) n["M0.0"]=false;
-      n["Q0.0"]=n["M0.0"];
-      return n;
-    },
-    rungs:[
-      {label:"Rung 1 — SET lampada",type:"simple",
-       contacts:[{type:"contact_no",bit:"I0.0",label:"ON"}],
-       coil:{type:"coil_set",bit:"M0.0",label:"S Lampada"}},
-      {label:"Rung 2 — RESET lampada",type:"simple",
-       contacts:[{type:"contact_no",bit:"I0.1",label:"OFF"}],
-       coil:{type:"coil_reset",bit:"M0.0",label:"R Lampada"}},
-      {label:"Rung 3 — Uscita",type:"simple",
-       contacts:[{type:"contact_no",bit:"M0.0",label:"Lampada"}],
-       coil:{type:"coil",bit:"Q0.0",label:"LUCE"}},
-    ]
-  },
-  {
-    id:"ton_timer", title:"Timer TON — Ritardo avvio",
-    desc:"Simula un TON (PT=5 click). Premi IN ripetutamente: ogni click è un 'tick'. Dopo 5 tick consecutivi l'uscita Q si attiva. Rilascia IN per resettare.",
-    initialBits:{"I0.0":false,"M_T0":false,"M_T1":false,"M_T2":false,"M_T3":false,"M_T4":false,"Q0.0":false},
-    inputs:[{bit:"I0.0",label:"IN — Abilita timer"}],
-    outputs:[{bit:"Q0.0",label:"Q — Uscita TON (ET≥PT=5)"}],
-    evaluate:(bits,prev={})=>{
-      const n={...bits};
-      if(!bits["I0.0"]){
-        n["M_T0"]=false;n["M_T1"]=false;n["M_T2"]=false;n["M_T3"]=false;n["M_T4"]=false;
-        n["Q0.0"]=false;
-      } else {
-        const cnt=[n["M_T0"],n["M_T1"],n["M_T2"],n["M_T3"],n["M_T4"]];
-        const filled=cnt.filter(Boolean).length;
-        if(filled<5) cnt[filled]=true;
-        n["M_T0"]=cnt[0];n["M_T1"]=cnt[1];n["M_T2"]=cnt[2];n["M_T3"]=cnt[3];n["M_T4"]=cnt[4];
-        n["Q0.0"]=cnt.every(Boolean);
-      }
-      return n;
-    },
-    rungs:[
-      {label:"Rung 1 — Abilitazione IN",type:"simple",
-       contacts:[{type:"contact_no",bit:"I0.0",label:"IN"}],
-       coil:{type:"coil",bit:"M_T0",label:"ET tick"}},
-      {label:"Rung 2 — Uscita Q (ET≥PT)",type:"simple",
-       contacts:[{type:"contact_no",bit:"M_T0",label:"T1"},{type:"contact_no",bit:"M_T4",label:"T5"}],
-       coil:{type:"coil",bit:"Q0.0",label:"Q TON"}},
-    ]
-  },
-  {
-    id:"ctu_counter", title:"Contatore CTU — Conta pezzi",
-    desc:"Simula CTU con PV=5. Premi PEZZO per ogni fronte di salita (0→1). A 5 pezzi Q scatta. Premi RESET per azzerare il contatore.",
-    initialBits:{"I0.0":false,"I0.1":false,"M_C0":false,"M_C1":false,"M_C2":false,"M_C3":false,"M_C4":false,"Q0.0":false,"M_PREV":false},
-    inputs:[{bit:"I0.0",label:"CU — PEZZO rilevato"},{bit:"I0.1",label:"R — RESET contatore"}],
-    outputs:[{bit:"Q0.0",label:"Q — 5 pezzi raggiunti (CV≥PV)"}],
-    evaluate:(bits,prev={})=>{
-      const n={...bits};
-      if(bits["I0.1"]){
-        ["M_C0","M_C1","M_C2","M_C3","M_C4"].forEach(k=>n[k]=false);
-        n["Q0.0"]=false;n["M_PREV"]=false;return n;
-      }
-      const rising=bits["I0.0"]&&!prev["M_PREV"];
-      n["M_PREV"]=bits["I0.0"];
-      if(rising){
-        const cnt=[n["M_C0"],n["M_C1"],n["M_C2"],n["M_C3"],n["M_C4"]];
-        const f=cnt.filter(Boolean).length;
-        if(f<5) cnt[f]=true;
-        n["M_C0"]=cnt[0];n["M_C1"]=cnt[1];n["M_C2"]=cnt[2];n["M_C3"]=cnt[3];n["M_C4"]=cnt[4];
-      }
-      n["Q0.0"]=n["M_C0"]&&n["M_C1"]&&n["M_C2"]&&n["M_C3"]&&n["M_C4"];
-      return n;
-    },
-    rungs:[
-      {label:"Rung 1 — Conta fronti CU (sensore pezzo)",type:"simple",
-       contacts:[{type:"contact_no",bit:"I0.0",label:"CU"}],
-       coil:{type:"coil",bit:"M_C0",label:"CV++"}},
-      {label:"Rung 2 — Uscita Q (CV≥PV=5)",type:"simple",
-       contacts:[{type:"contact_no",bit:"M_C0",label:"C1"},{type:"contact_no",bit:"M_C4",label:"C5"}],
-       coil:{type:"coil",bit:"Q0.0",label:"Q CTU"}},
-    ]
-  },
-];
-
-// ─────────────────────────────────────────────
 // MARKDOWN RENDERER
 // ─────────────────────────────────────────────
 function Inline({text}){
-  const parts=[];let rem=text,i=0;
+  const parts=[];
   const re=/(\*\*(.*?)\*\*|`([^`]+)`)/g;let m,last=0;
   while((m=re.exec(text))!==null){
     if(m.index>last) parts.push(<span key={last}>{text.slice(last,m.index)}</span>);
@@ -631,9 +174,9 @@ function ParallelRung({rung,bits,topPow,botPow,powered}){
       {/* split down */}
       <line x1={splitX} y1={topY} x2={splitX} y2={botY} stroke={botPow?A:DIM} strokeWidth={2}/>
       {/* top branch */}
-      <line x1={splitX} y1={topY} x2={splitX+n_top*perW+5} y2={topY} stroke={topPow?A:DIM} strokeWidth={2}/>
+      <line x1={splitX} y1={topY} x2={mergeX} y2={topY} stroke={topPow?A:DIM} strokeWidth={2}/>
       {/* bottom branch */}
-      <line x1={splitX} y1={botY} x2={splitX+n_bot*perW+5} y2={botY} stroke={botPow?A:DIM} strokeWidth={2}/>
+      <line x1={splitX} y1={botY} x2={mergeX} y2={botY} stroke={botPow?A:DIM} strokeWidth={2}/>
       {/* merge up */}
       <line x1={mergeX} y1={topY} x2={mergeX} y2={botY} stroke={mainCol} strokeWidth={2}/>
       {/* after merge */}
@@ -654,39 +197,24 @@ function ParallelRung({rung,bits,topPow,botPow,powered}){
   );
 }
 
-function LadderDiagram({example,bits}){
-  const evaluated=useMemo(()=>example.evaluate(bits),[bits,example]);
-  return(
-    <div className="space-y-3">
-      {example.rungs.map((rung,i)=>{
-        const coilBit=rung.coil?.bit;
-        const powered=coilBit?!!evaluated[coilBit]:false;
-        return(
-          <div key={i} className="bg-slate-900 rounded-lg p-2 border border-slate-700">
-            <div className="text-xs text-slate-500 font-mono mb-1 px-1">{rung.label}</div>
-            {rung.type==="simple"
-              ?<SimpleRung rung={rung} bits={evaluated} powered={powered}/>
-              :()=>{
-                const topPow=rung.top.every(e=>e.type==="contact_nc"?!evaluated[e.bit]:!!evaluated[e.bit]);
-                const botPow=rung.bottom.every(e=>e.type==="contact_nc"?!evaluated[e.bit]:!!evaluated[e.bit]);
-                return <ParallelRung rung={rung} bits={evaluated} topPow={topPow} botPow={botPow} powered={powered}/>;
-              }
-            }
-            {rung.type==="parallel"&&(()=>{
-              const topPow=rung.top.every(e=>e.type==="contact_nc"?!evaluated[e.bit]:!!evaluated[e.bit]);
-              const botPow=rung.bottom.every(e=>e.type==="contact_nc"?!evaluated[e.bit]:!!evaluated[e.bit]);
-              return <ParallelRung rung={rung} bits={evaluated} topPow={topPow} botPow={botPow} powered={powered}/>;
-            })()}
-          </div>
-        );
-      })}
-    </div>
-  );
+function FunctionRung({example, bits, timer}) {
+  const counter = example.id === "ctu_counter";
+  const kind = counter ? "CTU" : example.timerType || "TON";
+  return <svg role="img" aria-label={`${kind}, uscita Q ${Number(bits["Q0.0"])}`} viewBox="0 0 600 150" className="w-full min-w-[280px]">
+    <line x1="10" y1="10" x2="10" y2="140" stroke={RAIL} strokeWidth="3"/>
+    <line x1="10" y1="50" x2="210" y2="50" stroke={bits["I0.0"] ? A : GRAY} strokeWidth="2"/>
+    <text x="30" y="38" fill="white" fontSize="13">I0.0 = {Number(bits["I0.0"])}</text>
+    <rect x="210" y="15" width="185" height="120" rx="8" fill={BG_ELEM} stroke={A}/>
+    <text x="302" y="36" textAnchor="middle" fill={A} fontSize="16">{kind}</text>
+    <text x="222" y="58" fill="white" fontSize="12">{counter ? "CU" : "IN"}</text>
+    <text x="222" y="86" fill="white" fontSize="12">{counter ? `R = ${Number(bits["I0.1"])} · PV = 5` : `PT = ${example.timerPT / 1000} s`}</text>
+    <text x="222" y="115" fill="white" fontSize="12">{counter ? `CV = ${bits.CV}` : `ET = ${(timer.et / 1000).toFixed(2)} s`}</text>
+    <line x1="395" y1="50" x2="500" y2="50" stroke={bits["Q0.0"] ? A : GRAY} strokeWidth="2"/>
+    <text x="375" y="58" fill="white" fontSize="12">Q</text>
+    <Coil cx={535} y={50} elem={{bit:"Q0.0",label:"Uscita"}} active={bits["Q0.0"]}/>
+  </svg>;
 }
 
-// ─────────────────────────────────────────────
-// TABS
-// ─────────────────────────────────────────────
 function HomeTab({onGo,completed}){
   const totalLessons=MODULES.reduce((s,m)=>s+m.lessons.length,0);
   const pct=totalLessons>0?Math.round((completed.size/totalLessons)*100):0;
@@ -770,6 +298,7 @@ function ModuliTab({completed,setCompleted,startModule,onStartConsumed}){
   const lesson=mod.lessons.find(l=>l.id===lesId)||mod.lessons[0];
   const lesIndex=mod.lessons.findIndex(l=>l.id===lesId);
 
+  const isLast = modId === MODULES[MODULES.length - 1].id && lesIndex === mod.lessons.length - 1;
   const markDone=()=>setCompleted(s=>new Set([...s,lesson.id]));
   const prev=()=>{
     if(lesIndex>0) setLesId(mod.lessons[lesIndex-1].id);
@@ -782,9 +311,9 @@ function ModuliTab({completed,setCompleted,startModule,onStartConsumed}){
   };
 
   return(
-    <div className="flex gap-4 pb-8">
+    <div className="flex flex-col md:flex-row gap-4 pb-8">
       {/* Sidebar */}
-      <div className="w-48 shrink-0 space-y-1">
+      <div className="w-full md:w-48 shrink-0 space-y-1">
         {MODULES.map(m=>(
           <div key={m.id}>
             <button onClick={()=>{setModId(m.id);setLesId(m.lessons[0].id);}}
@@ -815,9 +344,9 @@ function ModuliTab({completed,setCompleted,startModule,onStartConsumed}){
             {lesson.content.map((b,i)=><ContentBlock key={i} block={b}/>)}
           </div>
           <div className="flex gap-3 mt-6 pt-4 border-t border-slate-700">
-            <button onClick={prev} className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 text-sm rounded-lg transition-all">← Precedente</button>
+            <button disabled={modId === MODULES[0].id && lesIndex === 0} onClick={prev} className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 text-sm rounded-lg transition-all">← Precedente</button>
             <button onClick={next} className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-lg transition-all">
-              {lesIndex<mod.lessons.length-1?"Avanti →":"Prossimo modulo →"}
+              {isLast ? (completed.has(lesson.id) ? "Corso completato ✓" : "Completa il corso ✓") : lesIndex<mod.lessons.length-1?"Avanti →":"Prossimo modulo →"}
             </button>
           </div>
         </div>
@@ -827,21 +356,16 @@ function ModuliTab({completed,setCompleted,startModule,onStartConsumed}){
 }
 
 function SimulatoreTab(){
-  const [exIdx,setExIdx]=useState(0);
-  const ex=EXAMPLES[exIdx];
-  const [bits,setBits]=useState({...ex.initialBits});
-  const [prevBits,setPrevBits]=useState({...ex.initialBits});
-
-  const evaluated=useMemo(()=>ex.evaluate(bits,prevBits),[bits,ex]);
-
-  const changeEx=(i)=>{setExIdx(i);setBits({...EXAMPLES[i].initialBits});setPrevBits({...EXAMPLES[i].initialBits});};
-
-  const toggleBit=(bit)=>setBits(b=>{
-    const nb={...b,[bit]:!b[bit]};
-    const result=ex.evaluate(nb,b);
-    setPrevBits(nb);
-    return result;
-  });
+  const [state, dispatch] = useReducer(simulationReducer, 0, createSimulation);
+  const { exIdx, bits: evaluated, timer } = state;
+  const ex = EXAMPLES[exIdx];
+  useEffect(() => {
+    if (!ex.timerBased) return;
+    const id = setInterval(() => dispatch({ type: "tick", now: performance.now() }), 50);
+    return () => clearInterval(id);
+  }, [exIdx, ex.timerBased]);
+  const changeEx = index => dispatch({ type: "example", index });
+  const toggleBit = bit => dispatch({ type: "input", bit, now: performance.now() });
 
   return(
     <div className="space-y-4 pb-8">
@@ -856,13 +380,16 @@ function SimulatoreTab(){
       </div>
       <div className="bg-slate-800 border border-amber-900/30 rounded-xl p-4">
         <p className="text-gray-400 text-xs mb-4">{ex.desc}</p>
+        <button onClick={() => changeEx(exIdx)} className="mb-4 px-3 py-2 rounded bg-slate-700 text-sm">Azzera esempio</button>
+        {ex.timerBased && <div className="mb-4 text-amber-300 font-mono text-sm" aria-live="off">ET: {(timer.et / 1000).toFixed(2)} s / PT: {ex.timerPT / 1000} s · Q: {Number(timer.q)}</div>}
+        {ex.id === "ctu_counter" && <div className="mb-4 text-amber-300 font-mono" aria-live="polite">CV: {evaluated.CV} / PV: 5</div>}
 
         {/* Inputs */}
         <div className="mb-4">
           <div className="text-amber-400 text-xs font-semibold uppercase tracking-wide mb-2">Ingressi — clicca per attivare</div>
           <div className="flex flex-wrap gap-2">
             {ex.inputs.map(inp=>(
-              <button key={inp.bit} onClick={()=>toggleBit(inp.bit)}
+              <button key={inp.bit} aria-pressed={!!evaluated[inp.bit]} onClick={()=>toggleBit(inp.bit)}
                 className={`px-3 py-2 rounded-lg border text-xs font-mono transition-all ${evaluated[inp.bit]?"bg-amber-600 border-amber-500 text-white":"bg-slate-900 border-slate-700 text-gray-400 hover:border-slate-500"}`}>
                 <div className="font-bold">{inp.bit}</div>
                 <div className="text-xs font-sans opacity-80">{inp.label}</div>
@@ -875,8 +402,8 @@ function SimulatoreTab(){
         {/* Ladder diagram */}
         <div className="mb-4">
           <div className="text-amber-400 text-xs font-semibold uppercase tracking-wide mb-2">Diagramma Ladder</div>
-          <div className="space-y-2">
-            {ex.rungs.map((rung,i)=>{
+          <div className="space-y-2 overflow-x-auto">
+            {(ex.timerBased || ex.id === "ctu_counter") ? <FunctionRung example={ex} bits={evaluated} timer={timer}/> : ex.rungs.map((rung,i)=>{
               const coilBit=rung.coil?.bit;
               const powered=coilBit?!!evaluated[coilBit]:false;
               return(
@@ -1031,7 +558,7 @@ function GlossarioTab(){
   return(
     <div className="space-y-4 pb-8">
       <input value={q} onChange={e=>setQ(e.target.value)}
-        placeholder="Cerca un termine... (es. Timer, FB, Rung)"
+        aria-label="Cerca nel glossario" placeholder="Cerca un termine... (es. Timer, FB, Rung)"
         className="w-full bg-slate-800 border border-slate-700 focus:border-amber-600 rounded-xl px-4 py-3 text-gray-300 text-sm outline-none placeholder-gray-600"/>
       <div className="text-gray-600 text-xs">{filtered.length} termini</div>
       <div className="space-y-2">
@@ -1061,13 +588,13 @@ const TABS=[
 export default function App(){
   const [tab,setTab]=useState("home");
   const [completed,setCompleted]=useState(
-    ()=>new Set(JSON.parse(localStorage.getItem("tia_completed")||"[]"))
+    ()=>loadCompleted()
   );
   const [startModule,setStartModule]=useState(null);
 
   // Persisti progresso su localStorage
   useEffect(()=>{
-    localStorage.setItem("tia_completed",JSON.stringify([...completed]));
+    saveCompleted(completed);
   },[completed]);
 
   const goTo=useCallback((dest)=>{
@@ -1084,8 +611,9 @@ export default function App(){
             <button key={t.id} onClick={()=>setTab(t.id)}
               style={{
                 padding:"12px 14px",
+                
                 borderBottom:`2px solid ${tab===t.id?"#F59E0B":"transparent"}`,
-                color:tab===t.id?"#F59E0B":"#9CA3AF",background:"none",border:"none",
+                color:tab===t.id?"#F59E0B":"#9CA3AF",background:"none",borderTop:0,borderLeft:0,borderRight:0,
                 cursor:"pointer",whiteSpace:"nowrap",fontSize:13,fontWeight:tab===t.id?600:400,
                 display:"flex",alignItems:"center",gap:6,transition:"all 0.15s"
               }}>
@@ -1113,3 +641,4 @@ export default function App(){
     </div>
   );
 }
+

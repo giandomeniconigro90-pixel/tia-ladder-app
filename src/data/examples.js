@@ -2,12 +2,12 @@ export const EXAMPLES = [
   {
     id:"start_stop", title:"Start / Stop Motore",
     desc:"Circuito classico con auto-mantenimento. Premi START per avviare, STOP per fermare.",
-    initialBits:{"I0.0":false,"I0.1":false,"M0.0":false,"Q0.0":false},
-    inputs:[{bit:"I0.0",label:"START (NA)"},{bit:"I0.1",label:"STOP (NC)"}],
+    initialBits:{"I0.0":false,"I0.1":true,"M0.0":false,"Q0.0":false},
+    inputs:[{bit:"I0.0",label:"START (NA)"},{bit:"I0.1",label:"STOP_OK — 1: rilasciato, 0: premuto"}],
     outputs:[{bit:"Q0.0",label:"MOTORE"}],
     evaluate:(bits)=>{
       const n={...bits};
-      n["M0.0"]=(bits["I0.0"]||bits["M0.0"])&&!bits["I0.1"];
+      n["M0.0"]=(bits["I0.0"]||bits["M0.0"])&&bits["I0.1"];
       n["Q0.0"]=n["M0.0"];
       return n;
     },
@@ -15,7 +15,7 @@ export const EXAMPLES = [
       {label:"Rung 1 — Controllo marcia",type:"parallel",
        top:[{type:"contact_no",bit:"I0.0",label:"START"}],
        bottom:[{type:"contact_no",bit:"M0.0",label:"Auto-man."}],
-       series:[{type:"contact_nc",bit:"I0.1",label:"STOP"}],
+       series:[{type:"contact_no",bit:"I0.1",label:"STOP_OK"}],
        coil:{type:"coil",bit:"M0.0",label:"Marcia"}},
       {label:"Rung 2 — Uscita motore",type:"simple",
        contacts:[{type:"contact_no",bit:"M0.0",label:"Marcia"}],
@@ -72,7 +72,7 @@ export const EXAMPLES = [
   },
   {
     id:"ton_timer", title:"Timer TON — Ritardo avvio",
-    desc:"Timer TON reale con PT = 5 secondi. Tieni premuto IN: dopo 5 secondi l'uscita Q si attiva. Rilascia IN per resettare il timer.",
+    desc:"Timer TON reale con PT = 5 secondi. Attiva IN: dopo 5 secondi l'uscita Q si attiva. Disattiva IN per resettare il timer.",
     timerBased: true,
     timerPT: 5000,
     initialBits:{"I0.0":false,"Q0.0":false},
@@ -112,25 +112,13 @@ export const EXAMPLES = [
   {
     id:"ctu_counter", title:"Contatore CTU — Conta pezzi",
     desc:"Simula CTU con PV=5. Premi PEZZO per ogni fronte di salita (0→1). A 5 pezzi Q scatta. Premi RESET per azzerare il contatore.",
-    initialBits:{"I0.0":false,"I0.1":false,"M_C0":false,"M_C1":false,"M_C2":false,"M_C3":false,"M_C4":false,"Q0.0":false,"M_PREV":false},
+    initialBits:{"I0.0":false,"I0.1":false,"CV":0,"Q0.0":false,"M_PREV":false},
     inputs:[{bit:"I0.0",label:"CU — PEZZO rilevato"},{bit:"I0.1",label:"R — RESET contatore"}],
     outputs:[{bit:"Q0.0",label:"Q — 5 pezzi raggiunti (CV≥PV)"}],
     evaluate:(bits,prev={})=>{
-      const n={...bits};
-      if(bits["I0.1"]){
-        ["M_C0","M_C1","M_C2","M_C3","M_C4"].forEach(k=>n[k]=false);
-        n["Q0.0"]=false;n["M_PREV"]=false;return n;
-      }
-      const rising=bits["I0.0"]&&!prev["M_PREV"];
-      n["M_PREV"]=bits["I0.0"];
-      if(rising){
-        const cnt=[n["M_C0"],n["M_C1"],n["M_C2"],n["M_C3"],n["M_C4"]];
-        const f=cnt.filter(Boolean).length;
-        if(f<5) cnt[f]=true;
-        n["M_C0"]=cnt[0];n["M_C1"]=cnt[1];n["M_C2"]=cnt[2];n["M_C3"]=cnt[3];n["M_C4"]=cnt[4];
-      }
-      n["Q0.0"]=n["M_C0"]&&n["M_C1"]&&n["M_C2"]&&n["M_C3"]&&n["M_C4"];
-      return n;
+      const rising = bits["I0.0"] && !prev["I0.0"];
+      const cv = bits["I0.1"] ? 0 : Math.min(32767, (prev.CV || 0) + Number(rising));
+      return {...bits, CV: cv, "M_PREV": bits["I0.0"], "M_C0":cv > 0, "M_C4":cv >= 5, "Q0.0":cv >= 5};
     },
     rungs:[
       {label:"Rung 1 — Conta fronti CU (sensore pezzo)",type:"simple",
@@ -142,3 +130,4 @@ export const EXAMPLES = [
     ]
   },
 ];
+

@@ -1,0 +1,5 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+button:focus-visible, input:focus-visible { outline: 2px solid #f59e0b; outline-offset: 3px; }
+button:disabled { opacity: .45; cursor: default; }
